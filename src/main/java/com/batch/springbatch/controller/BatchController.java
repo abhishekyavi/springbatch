@@ -16,13 +16,14 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import java.util.concurrent.atomic.AtomicInteger;
-
-
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/batch")
 public class BatchController {
+
+    private static final Logger logger = LoggerFactory.getLogger(BatchController.class);
 
     @Autowired
     private JobLauncher jobLauncher;
@@ -53,6 +54,7 @@ public class BatchController {
     @PostConstruct
    
           public void initMetrics() {
+        logger.info("Initializing metrics for BatchController");
         // Job execution counters
         importJobStartCounter = Counter.builder("batch_job_started_total")
                 .description("Total number of import jobs started")
@@ -100,43 +102,54 @@ public class BatchController {
                 .register(meterRegistry);
 
 
+        logger.info("All metrics have been successfully initialized");
     
     }
 
     @PostMapping("/import")
     public String importPersons() {
+        logger.info("Starting import job execution");
         importJobStartCounter.increment();
         activeJobs.incrementAndGet();
              Timer.Sample sample = Timer.start(meterRegistry);
 
          try {
+            logger.debug("Creating job parameters for import job");
             JobParameters jobParameters = new JobParametersBuilder()
                     .addLong("startAt", System.currentTimeMillis())
                     .toJobParameters();
             
+            logger.info("Launching import job with parameters: {}", jobParameters);
             JobExecution jobExecution = jobLauncher.run(importJob, jobParameters);
             sample.stop(importJobTimer);
+            
+            logger.info("Import job execution completed with status: {}", jobExecution.getExitStatus().getExitCode());
             
             // Check job execution status and increment appropriate counter
             if (jobExecution.getExitStatus().getExitCode().equals("COMPLETED")) {
                 importJobSuccessCounter.increment();
+                logger.info("Import job completed successfully");
                 return "Import job completed successfully>>>>>>";
             } else {
                 importJobFailureCounter.increment();
+                logger.warn("Import job failed with status: {}", jobExecution.getExitStatus().getExitCode());
                 return "Import job failed with status: " + jobExecution.getExitStatus().getExitCode();
             }
             
         } catch (Exception e) {
             sample.stop(importJobTimer);
             importJobFailureCounter.increment();
+            logger.error("Import job failed with exception: {}", e.getMessage(), e);
             return "Import job failed:>>>>> " + e.getMessage();
         } finally {
             activeJobs.decrementAndGet();
+            logger.debug("Active jobs count: {}", activeJobs.get());
         }
     }
 
     @PostMapping("/export")
     public String exportPersons() {
+        logger.info("Starting export job execution");
         // Increment start counter
         exportJobStartCounter.increment();
         activeJobs.incrementAndGet();
@@ -144,28 +157,36 @@ public class BatchController {
         Timer.Sample sample = Timer.start(meterRegistry);
         
         try {
+            logger.debug("Creating job parameters for export job");
             JobParameters jobParameters = new JobParametersBuilder()
                     .addLong("startAt", System.currentTimeMillis())
                     .toJobParameters();
             
+            logger.info("Launching export job with parameters: {}", jobParameters);
             JobExecution jobExecution = jobLauncher.run(exportJob, jobParameters);
             sample.stop(exportJobTimer);
+            
+            logger.info("Export job execution completed with status: {}", jobExecution.getExitStatus().getExitCode());
             
             // Check job execution status and increment appropriate counter
             if (jobExecution.getExitStatus().getExitCode().equals("COMPLETED")) {
                 exportJobSuccessCounter.increment();
+                logger.info("Export job completed successfully");
                 return "Export job completed successfully";
             } else {
                 exportJobFailureCounter.increment();
+                logger.warn("Export job failed with status: {}", jobExecution.getExitStatus().getExitCode());
                 return "Export job failed with status: " + jobExecution.getExitStatus().getExitCode();
             }
             
         } catch (Exception e) {
             sample.stop(exportJobTimer);
             exportJobFailureCounter.increment();
+            logger.error("Export job failed with exception: {}", e.getMessage(), e);
             return "Export job failed: " + e.getMessage();
         } finally {
             activeJobs.decrementAndGet();
+            logger.debug("Active jobs count: {}", activeJobs.get());
         }
     }
 }
