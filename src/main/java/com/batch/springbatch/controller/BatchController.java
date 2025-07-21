@@ -14,6 +14,12 @@ import org.springframework.web.bind.annotation.RestController;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.PostConstruct;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
@@ -21,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/batch")
+@Tag(name = "Batch Operations", description = "Endpoints for managing batch jobs manually")  
 public class BatchController {
 
     private static final Logger logger = LoggerFactory.getLogger(BatchController.class);
@@ -52,8 +59,7 @@ public class BatchController {
     private AtomicInteger activeJobs = new AtomicInteger(0);
 
     @PostConstruct
-   
-          public void initMetrics() {
+    public void initMetrics() {
         logger.info("Initializing metrics for BatchController");
         // Job execution counters
         importJobStartCounter = Counter.builder("batch_job_started_total")
@@ -107,6 +113,26 @@ public class BatchController {
     }
 
     @PostMapping("/import")
+    @Operation(summary = "Import Persons", description = "Triggers the import job for processing person data")
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200", 
+            description = "Import job executed successfully",
+            content = @Content(
+                mediaType = "text/plain",
+                schema = @Schema(type = "string", example = "Import job completed successfully>>>>>>")
+            )
+        ),
+        @ApiResponse(
+            responseCode = "500", 
+            description = "Import job execution failed",
+            content = @Content(
+                mediaType = "text/plain",
+                schema = @Schema(type = "string", example = "Import job failed:>>>>> Error message")
+            )
+        )
+    })
+
     public String importPersons() {
         logger.info("Starting import job execution");
         importJobStartCounter.increment();
@@ -148,6 +174,25 @@ public class BatchController {
     }
 
     @PostMapping("/export")
+    @Operation(summary = "Export Persons", description = "Triggers the export job for processing person data")
+    @ApiResponses(value = { 
+        @ApiResponse(
+            responseCode = "200", 
+            description = "Export job executed successfully",
+            content = @Content(
+                mediaType = "text/plain",
+                schema = @Schema(type = "string", example = "Export job completed successfully")
+            )
+        ),
+        @ApiResponse(
+            responseCode = "500", 
+            description = "Export job execution failed",
+            content = @Content(
+                mediaType = "text/plain",
+                schema = @Schema(type = "string", example = "Export job failed: Error message")
+            )
+        )
+    })
     public String exportPersons() {
         logger.info("Starting export job execution");
         // Increment start counter

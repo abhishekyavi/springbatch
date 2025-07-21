@@ -1,25 +1,32 @@
 package com.batch.springbatch.entity;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.persistence.*;
 
 @Entity
 @Table(name = "person")
+@Tag(name = "Person", description = "Entity representing a person in the system")
 public class Person {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Schema(description = "Unique identifier for the person", example = "1")
     private Long id;
     
     @Column(name = "first_name")
+    @Schema(description = "First name of the person", example = "Alpha")
     private String firstName;
-    
+    @Schema(description = "Last name of the person", example = "Beta")
     @Column(name = "last_name")
     private String lastName;
     
     @Column(name = "email")
+    @Schema(description = "Email address of the person", example = "alpha.doe@example.com")
     private String email;
     
     @Column(name = "age")
+    @Schema(description = "Age of the person", example = "30")
     private Integer age;
     
     // Constructors
