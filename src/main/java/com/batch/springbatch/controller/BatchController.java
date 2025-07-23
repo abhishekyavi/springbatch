@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/batch")
-@Tag(name = "Batch Operations", description = "Endpoints for managing batch jobs manually")  
+@Tag(name = "Batch Operations", description = "Endpoints for managing batch jobs manually")
 public class BatchController {
 
     private static final Logger logger = LoggerFactory.getLogger(BatchController.class);
@@ -43,10 +43,9 @@ public class BatchController {
     @Qualifier("exportPersonJob")
     private Job exportJob;
 
-
     @Autowired
     private MeterRegistry meterRegistry;
-    
+
     // Custom metrics
     private Counter importJobStartCounter;
     private Counter importJobSuccessCounter;
@@ -62,111 +61,95 @@ public class BatchController {
     public void initMetrics() {
         logger.info("Initializing metrics for BatchController");
         // Job execution counters
-        importJobStartCounter = Counter.builder("batch_job_started_total")
+        importJobStartCounter = Counter.builder("manual_batch_job_started_total")
                 .description("Total number of import jobs started")
-                .tag("job_name", "importPersonJob")
+                .tag("job_name", "manual_importPersonJob")
                 .register(meterRegistry);
 
-        importJobSuccessCounter = Counter.builder("batch_job_completed_total")
+        importJobSuccessCounter = Counter.builder("manual_batch_job_completed_total")
                 .description("Total number of import jobs completed successfully")
-                .tag("job_name", "importPersonJob")
+                .tag("job_name", "manual_importPersonJob")
                 .tag("status", "success")
                 .register(meterRegistry);
 
-        importJobFailureCounter = Counter.builder("batch_job_completed_total")
+        importJobFailureCounter = Counter.builder("manual_batch_job_completed_total")
                 .description("Total number of import jobs failed")
-                .tag("job_name", "importPersonJob")
+                .tag("job_name", "manual_importPersonJob")
                 .tag("status", "failure")
                 .register(meterRegistry);
 
-        exportJobStartCounter = Counter.builder("batch_job_started_total")
+        exportJobStartCounter = Counter.builder("manual_batch_job_started_total")
                 .description("Total number of export jobs started")
-                .tag("job_name", "exportPersonJob")
+                .tag("job_name", "manual_exportPersonJob")
                 .register(meterRegistry);
 
-        exportJobSuccessCounter = Counter.builder("batch_job_completed_total")
+        exportJobSuccessCounter = Counter.builder("manual_batch_job_completed_total")
                 .description("Total number of export jobs completed successfully")
-                .tag("job_name", "exportPersonJob")
+                .tag("job_name", "manual_exportPersonJob")
                 .tag("status", "success")
                 .register(meterRegistry);
 
-        exportJobFailureCounter = Counter.builder("batch_job_completed_total")
+        exportJobFailureCounter = Counter.builder("manual_batch_job_completed_total")
                 .description("Total number of export jobs failed")
-                .tag("job_name", "exportPersonJob")
+                .tag("job_name", "manual_exportPersonJob")
                 .tag("status", "failure")
                 .register(meterRegistry);
 
         // Job execution timers
-        importJobTimer = Timer.builder("batch_job_duration_seconds")
+        importJobTimer = Timer.builder("manual_batch_job_duration_seconds")
                 .description("Time taken to execute import job")
-                .tag("job_name", "importPersonJob")
+                .tag("job_name", "manual_importPersonJob")
                 .register(meterRegistry);
 
-        exportJobTimer = Timer.builder("batch_job_duration_seconds")
+        exportJobTimer = Timer.builder("manual_batch_job_duration_seconds")
                 .description("Time taken to execute export job")
-                .tag("job_name", "exportPersonJob")
+                .tag("job_name", "manual_exportPersonJob")
                 .register(meterRegistry);
-
 
         logger.info("All metrics have been successfully initialized");
-    
     }
 
     @PostMapping("/import")
     @Operation(summary = "Import Persons", description = "Triggers the import job for processing person data")
     @ApiResponses(value = {
-        @ApiResponse(
-            responseCode = "200", 
-            description = "Import job executed successfully",
-            content = @Content(
-                mediaType = "text/plain",
-                schema = @Schema(type = "string", example = "Import job completed successfully>>>>>>")
-            )
-        ),
-        @ApiResponse(
-            responseCode = "500", 
-            description = "Import job execution failed",
-            content = @Content(
-                mediaType = "text/plain",
-                schema = @Schema(type = "string", example = "Import job failed:>>>>> Error message")
-            )
-        )
+            @ApiResponse(responseCode = "200", description = "Import job executed successfully", content = @Content(mediaType = "text/plain", schema = @Schema(type = "string", example = "Import job completed successfully"))),
+            @ApiResponse(responseCode = "500", description = "Import job execution failed", content = @Content(mediaType = "text/plain", schema = @Schema(type = "string", example = "Import job failed:Error message")))
     })
 
     public String importPersons() {
         logger.info("Starting import job execution");
         importJobStartCounter.increment();
         activeJobs.incrementAndGet();
-             Timer.Sample sample = Timer.start(meterRegistry);
+        Timer.Sample sample = Timer.start(meterRegistry);
 
-         try {
+        try {
             logger.debug("Creating job parameters for import job");
             JobParameters jobParameters = new JobParametersBuilder()
                     .addLong("startAt", System.currentTimeMillis())
                     .toJobParameters();
-            
+
             logger.info("Launching import job with parameters: {}", jobParameters);
             JobExecution jobExecution = jobLauncher.run(importJob, jobParameters);
             sample.stop(importJobTimer);
-            
+
             logger.info("Import job execution completed with status: {}", jobExecution.getExitStatus().getExitCode());
-            
+
             // Check job execution status and increment appropriate counter
             if (jobExecution.getExitStatus().getExitCode().equals("COMPLETED")) {
                 importJobSuccessCounter.increment();
                 logger.info("Import job completed successfully");
-                return "Import job completed successfully>>>>>>";
+                return "Import job completed successfully";
             } else {
                 importJobFailureCounter.increment();
                 logger.warn("Import job failed with status: {}", jobExecution.getExitStatus().getExitCode());
                 return "Import job failed with status: " + jobExecution.getExitStatus().getExitCode();
             }
-            
+
         } catch (Exception e) {
             sample.stop(importJobTimer);
             importJobFailureCounter.increment();
             logger.error("Import job failed with exception: {}", e.getMessage(), e);
-            return "Import job failed:>>>>> " + e.getMessage();
+            return "Import job failed:" + e.getMessage();
         } finally {
             activeJobs.decrementAndGet();
             logger.debug("Active jobs count: {}", activeJobs.get());
@@ -175,44 +158,30 @@ public class BatchController {
 
     @PostMapping("/export")
     @Operation(summary = "Export Persons", description = "Triggers the export job for processing person data")
-    @ApiResponses(value = { 
-        @ApiResponse(
-            responseCode = "200", 
-            description = "Export job executed successfully",
-            content = @Content(
-                mediaType = "text/plain",
-                schema = @Schema(type = "string", example = "Export job completed successfully")
-            )
-        ),
-        @ApiResponse(
-            responseCode = "500", 
-            description = "Export job execution failed",
-            content = @Content(
-                mediaType = "text/plain",
-                schema = @Schema(type = "string", example = "Export job failed: Error message")
-            )
-        )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Export job executed successfully", content = @Content(mediaType = "text/plain", schema = @Schema(type = "string", example = "Export job completed successfully"))),
+            @ApiResponse(responseCode = "500", description = "Export job execution failed", content = @Content(mediaType = "text/plain", schema = @Schema(type = "string", example = "Export job failed: Error message")))
     })
     public String exportPersons() {
         logger.info("Starting export job execution");
         // Increment start counter
         exportJobStartCounter.increment();
         activeJobs.incrementAndGet();
-        
+
         Timer.Sample sample = Timer.start(meterRegistry);
-        
+
         try {
             logger.debug("Creating job parameters for export job");
             JobParameters jobParameters = new JobParametersBuilder()
                     .addLong("startAt", System.currentTimeMillis())
                     .toJobParameters();
-            
+
             logger.info("Launching export job with parameters: {}", jobParameters);
             JobExecution jobExecution = jobLauncher.run(exportJob, jobParameters);
             sample.stop(exportJobTimer);
-            
+
             logger.info("Export job execution completed with status: {}", jobExecution.getExitStatus().getExitCode());
-            
+
             // Check job execution status and increment appropriate counter
             if (jobExecution.getExitStatus().getExitCode().equals("COMPLETED")) {
                 exportJobSuccessCounter.increment();
@@ -223,7 +192,7 @@ public class BatchController {
                 logger.warn("Export job failed with status: {}", jobExecution.getExitStatus().getExitCode());
                 return "Export job failed with status: " + jobExecution.getExitStatus().getExitCode();
             }
-            
+
         } catch (Exception e) {
             sample.stop(exportJobTimer);
             exportJobFailureCounter.increment();

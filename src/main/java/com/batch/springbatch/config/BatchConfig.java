@@ -1,7 +1,8 @@
-
 package com.batch.springbatch.config;
-import com.batch.springbatch.entity.Person;
-import com.batch.springbatch.processor.PersonItemProcessor;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+import javax.sql.DataSource;
 
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
@@ -9,32 +10,35 @@ import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
+import org.springframework.batch.item.database.JdbcBatchItemWriter;
+// ... imports...for export functionality
+import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
+import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
+import org.springframework.batch.item.file.builder.FlatFileItemWriterBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.batch.item.ItemProcessor;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.batch.item.database.JdbcBatchItemWriter;
-
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-
-import javax.sql.DataSource;
-// ... imports...for export functionality
-import org.springframework.batch.item.database.JdbcCursorItemReader;
-import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
-import org.springframework.batch.item.file.FlatFileItemWriter;
-import org.springframework.batch.item.file.builder.FlatFileItemWriterBuilder;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.datasource.init.DataSourceInitializer;
+import org.springframework.jdbc.datasource.init.DatabasePopulator;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
+import org.springframework.transaction.PlatformTransactionManager;
 
+import com.batch.springbatch.entity.Person;
+import com.batch.springbatch.listener.JobExecutionMDCListener;
+import com.batch.springbatch.processor.PersonItemProcessor;
 
 @Configuration
 public class BatchConfig {
@@ -47,6 +51,28 @@ public class BatchConfig {
 
     @Autowired
     public DataSource dataSource;
+    
+    // Force Spring Batch schema initialization
+    @Bean
+    public DataSourceInitializer dataSourceInitializer() {
+        DataSourceInitializer initializer = new DataSourceInitializer();
+        initializer.setDataSource(dataSource);
+        initializer.setDatabasePopulator(databasePopulator());
+        return initializer;
+    }
+    
+    private DatabasePopulator databasePopulator() {
+        ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+        PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+        try {
+            Resource[] resources = resolver.getResources("classpath*:org/springframework/batch/core/schema-h2.sql");
+            populator.addScripts(resources);
+        } catch (Exception e) {
+            // Fallback to manual SQL if resource not found
+            populator.addScript(resolver.getResource("classpath:batch-schema.sql"));
+        }
+        return populator;
+    }
 
     @Bean
     public FlatFileItemReader<Person> reader() {
@@ -87,10 +113,11 @@ public class BatchConfig {
     }
 
     @Bean
-    public Job importPersonJob() {
+    public Job importPersonJob(JobExecutionMDCListener jobExecutionMDCListener) {
         return new JobBuilder("importPersonJob", jobRepository)
                 .flow(step1())
                 .end()
+                .listener(jobExecutionMDCListener)
                 .build();
     }
 
@@ -133,15 +160,17 @@ public Step exportStep() {
             .<Person, Person>chunk(10, transactionManager)
             .reader(dbReader())
             .processor(exportProcessor())
-            .writer(csvWriter())
+           // .writer(csvWriter())
+            .writer(scheduledCsvWriter(null, null))
             .build();
 }
 
 @Bean
-public Job exportPersonJob() {
+public Job exportPersonJob(JobExecutionMDCListener jobExecutionMDCListener) {
     return new JobBuilder("exportPersonJob", jobRepository)
             .flow(exportStep())
             .end()
+            .listener(jobExecutionMDCListener)
             .build();
 }
 

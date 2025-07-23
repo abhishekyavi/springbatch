@@ -1,17 +1,14 @@
 package com.batch.springbatch.scheduler;
 
 import org.slf4j.Logger;
-import org.springframework.batch.core.JobParameters;
-import org.springframework.batch.core.JobParametersBuilder;
-import org.springframework.batch.core.JobParametersInvalidException;
-import org.springframework.batch.core.launch.JobLauncher;
-import org.springframework.batch.core.repository.JobExecutionAlreadyRunningException;
-import org.springframework.batch.core.repository.JobInstanceAlreadyCompleteException;
-import org.springframework.batch.core.repository.JobRestartException;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.slf4j.MDC;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -23,7 +20,6 @@ import jakarta.annotation.PostConstruct;
 @Component
 public class BatchJobScheduler {
     private static final Logger logger = org.slf4j.LoggerFactory.getLogger(BatchJobScheduler.class);
-
 
     @Autowired
     private JobLauncher jobLauncher;
@@ -39,8 +35,7 @@ public class BatchJobScheduler {
     @Autowired
     private MeterRegistry meterRegistry;
 
-
-// Metrics for scheduled jobs
+    // ...existing metrics code...
     private Counter scheduledImportJobStartCounter;
     private Counter scheduledImportJobSuccessCounter;
     private Counter scheduledImportJobFailureCounter;
@@ -52,7 +47,7 @@ public class BatchJobScheduler {
 
     @PostConstruct
     public void initMetrics() {
-        // Scheduled job execution counters
+        // ...existing metrics initialization code...
         scheduledImportJobStartCounter = Counter.builder("scheduled_batch_job_started_total")
                 .description("Total number of scheduled import jobs started")
                 .tag("job_name", "importPersonJob")
@@ -83,7 +78,6 @@ public class BatchJobScheduler {
                 .tag("job_name", "exportPersonJob")
                 .register(meterRegistry);
 
-        // Timers for job execution duration
         scheduledImportJobTimer = Timer.builder("scheduled_batch_job_duration_seconds")
                 .description("Duration of scheduled import jobs in seconds")
                 .tag("job_name", "importPersonJob")
@@ -95,23 +89,26 @@ public class BatchJobScheduler {
                 .register(meterRegistry);
     }
 
-
-
     @Scheduled(cron = "${batch.import.cron}")
     public void scheduleImportJob() {
+        // Add job context for Loki labels
+        MDC.put("jobName", "importPersonJob");
+        
         scheduledImportJobStartCounter.increment();
         Timer.Sample sample = Timer.start(meterRegistry);
+        
+        logger.info("Starting scheduled import job");
 
         try {
             JobParameters jobParameters = new JobParametersBuilder()
-                .addLong("startAt:", System.currentTimeMillis())
+                .addLong("startAt", System.currentTimeMillis())
                 .addString("trigger", "scheduled")
                 .toJobParameters();
 
-               JobExecution execution=  jobLauncher.run(importJob, jobParameters);
-                sample.stop(scheduledImportJobTimer);
+            JobExecution execution = jobLauncher.run(importJob, jobParameters);
+            sample.stop(scheduledImportJobTimer);
 
-                 if (execution.getExitStatus().getExitCode().equals("COMPLETED")) {
+            if (execution.getExitStatus().getExitCode().equals("COMPLETED")) {
                 scheduledImportJobSuccessCounter.increment();
                 logger.info("Scheduled import job completed successfully. Job ID: {}", 
                     execution.getJobId());
@@ -124,19 +121,26 @@ public class BatchJobScheduler {
             sample.stop(scheduledImportJobTimer);
             scheduledImportJobFailureCounter.increment();
             logger.error("Error during scheduled import job execution: {}", e.getMessage(), e);
-           
+        } finally {
+            MDC.clear();
         }
 
-        logger.info("Scheduled import job completed");}
+        logger.info("Scheduled import job completed");
+    }
 
     @Scheduled(cron = "${batch.export.cron}")
     public void scheduleExportJob() {
+        // Add job context for Loki labels
+        MDC.put("jobName", "exportPersonJob");
+        
         scheduledExportJobStartCounter.increment();
         Timer.Sample sample = Timer.start(meterRegistry);
-        try{
-
+        
+        logger.info("Starting scheduled export job");
+        
+        try {
             JobParameters jobParameters = new JobParametersBuilder()
-                .addLong("startAt:", System.currentTimeMillis())
+                .addLong("startAt", System.currentTimeMillis())
                 .addString("trigger", "scheduled")
                 .toJobParameters();
 
@@ -152,17 +156,14 @@ public class BatchJobScheduler {
                 logger.error("Scheduled export job failed with status: {}", 
                     execution.getExitStatus().getExitCode());
             }
-
-
-        }catch (Exception e) {
+        } catch (Exception e) {
             sample.stop(scheduledExportJobTimer);
             scheduledExportJobFailureCounter.increment();
             logger.error("Error during scheduled export job execution: {}", e.getMessage(), e);
+        } finally {
+            MDC.clear();
         }
-
-
+        
+        logger.info("Scheduled export job completed");
     }
-
-
-
 }

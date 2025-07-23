@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     
     <!-- Console Appender -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -9,49 +8,41 @@
         </encoder>
     </appender>
 
+    <!-- File Appender for Promtail -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/springbatch.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/springbatch.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <!-- Loki Appender -->
     <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
         <http>
-            <url>${app.loki.url:-http://loki-abhishek1426-dev.apps.rm3.7wse.p1.openshiftapps.com/loki/api/v1/push}</url>
+            <url>http://loki-abhishek1426-dev.apps.rm3.7wse.p1.openshiftapps.com/loki/api/v1/push</url>
         </http>
         <format>
             <label>
-                <pattern>application=${app.loki.labels.application:-springbatch},environment=${app.loki.labels.environment:-dev},instance=${app.loki.labels.instance:-localhost},level=%level,job=%X{jobName:-unknown}</pattern>
+                <pattern>application=springbatch,environment=dev,job=%X{jobName:-unknown},level=%level</pattern>
             </label>
             <message>
                 <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
             </message>
-            <sortByTime>true</sortByTime>
         </format>
-        <batchMaxItems>${app.loki.batch-max-items:-1000}</batchMaxItems>
-        <batchTimeoutMs>${app.loki.batch-timeout-ms:-10000}</batchTimeoutMs>
     </appender>
 
-    <!-- Async wrapper for Loki to avoid blocking -->
-    <appender name="ASYNC_LOKI" class="ch.qos.logback.classic.AsyncAppender">
-        <appender-ref ref="LOKI"/>
-        <queueSize>1000</queueSize>
-        <discardingThreshold>0</discardingThreshold>
-        <includeCallerData>true</includeCallerData>
-    </appender>
-
-    <!-- Spring Batch specific logger -->
-    <logger name="org.springframework.batch" level="INFO" additivity="false">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="ASYNC_LOKI"/>
-    </logger>
-
-    <!-- Your application logger -->
-    <logger name="com.batch.springbatch" level="DEBUG" additivity="false">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="ASYNC_LOKI"/>
-    </logger>
+     <!-- Enable debug logging for Loki4j -->
+    <logger name="com.github.loki4j" level="DEBUG"/>
 
     <!-- Root logger -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="ASYNC_LOKI"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="LOKI"/>
     </root>
 </configuration>
-
-
