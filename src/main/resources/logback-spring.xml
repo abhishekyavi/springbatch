@@ -12,7 +12,7 @@
     <!-- Loki Appender -->
     <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
         <http>
-            <url>${app.loki.url:-http://loki-abhishek1426-dev.apps.rm3.7wse.p1.openshiftapps.com/loki/api/v1/push}</url>
+            <url>${app.loki.url:-http://loki-abhishekyavi2015-dev.apps.rm2.thpm.p1.openshiftapps.com/loki/api/v1/push}</url>
         </http>
         <format>
             <label>
